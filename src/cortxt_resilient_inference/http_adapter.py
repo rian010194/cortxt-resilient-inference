@@ -1,4 +1,4 @@
-"""OpenAI-compatible HTTP adapter with a hard process deadline."""
+"""OpenAI-compatible HTTP adapter with a bounded process deadline."""
 
 import json
 import multiprocessing
@@ -63,7 +63,7 @@ def _worker(base_url: str, model: str, messages: Sequence[Mapping[str, object]],
             else:
                 payload = json.loads(raw.decode("utf-8"))
                 message = payload["choices"][0]["message"]
-                if not isinstance(message, dict):
+                if not isinstance(message, dict) or message.get("role") != "assistant":
                     raise ValueError
                 result = {"outcome": "succeeded", "response": message}
     except urllib.error.HTTPError as exc:

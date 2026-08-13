@@ -46,8 +46,17 @@ def execute(request: Mapping[str, object], adapters: Mapping[str, Adapter]) -> d
     idempotency = request["idempotency"]
     if not isinstance(task_id, str) or not task_id:
         raise ValueError("task_id must be a non-empty string")
-    if not isinstance(routes, list) or not routes:
-        raise ValueError("routes must be a non-empty list")
+    if (
+        not isinstance(routes, list)
+        or not routes
+        or not all(
+            isinstance(route, Mapping)
+            and isinstance(route.get("route_id"), str)
+            and bool(route.get("route_id"))
+            for route in routes
+        )
+    ):
+        raise ValueError("routes must contain mappings with non-empty route_id values")
     if type(max_attempts) is not int or max_attempts <= 0:
         raise ValueError("max_attempts_total must be a positive integer")
     if type(timeout_ms) is not int or timeout_ms <= 0:
@@ -81,6 +90,9 @@ def execute(request: Mapping[str, object], adapters: Mapping[str, Adapter]) -> d
             if not isinstance(response, Mapping):
                 attempts[-1] = Attempt(attempts[-1].attempt, route_id, "invalid_response",
                                        latency, cost_status)
+                if idempotency == "non_idempotent":
+                    return _terminal(task_id, "blocked", attempts,
+                                     "non_idempotent_effect_unknown")
                 continue
             return _terminal(task_id, "succeeded", attempts, "completed", route_id, response)
         effect_state = raw.get("effect_state", "before_effect")

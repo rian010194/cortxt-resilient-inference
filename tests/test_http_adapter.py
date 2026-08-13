@@ -17,6 +17,7 @@ class StubHandler(BaseHTTPRequestHandler):
     delay_seconds = 0.0
     redirect_url = None
     received_authorizations = None
+    message_role = "assistant"
 
     def do_POST(self):
         if self.received_authorizations is not None:
@@ -31,7 +32,7 @@ class StubHandler(BaseHTTPRequestHandler):
         if self.delay_seconds:
             time.sleep(self.delay_seconds)
         body = json.dumps({
-            "choices": [{"message": {"role": "assistant", "content": request["model"]}}]
+            "choices": [{"message": {"role": self.message_role, "content": request["model"]}}]
         }).encode()
         self.send_response(self.status)
         self.send_header("Content-Type", "application/json")
@@ -47,9 +48,11 @@ class StubHandler(BaseHTTPRequestHandler):
 
 
 class StubServer:
-    def __init__(self, status=200, delay=0.0, redirect_url=None, capture=False):
+    def __init__(self, status=200, delay=0.0, redirect_url=None, capture=False,
+                 message_role="assistant"):
         attributes = {"status": status, "delay_seconds": delay, "redirect_url": redirect_url,
-                      "received_authorizations": [] if capture else None}
+                      "received_authorizations": [] if capture else None,
+                      "message_role": message_role}
         handler = type("ConfiguredHandler", (StubHandler,), attributes)
         self.handler = handler
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -83,6 +86,12 @@ class HttpAdapterTests(unittest.TestCase):
             result = self.adapter(route(base_url), 3000)
         self.assertEqual(result["outcome"], "succeeded")
         self.assertEqual(result["response"], {"role": "assistant", "content": "model-a"})
+
+    def test_non_assistant_message_is_rejected(self):
+        with StubServer(message_role="user") as base_url:
+            result = self.adapter(route(base_url), 3000)
+        self.assertEqual(result["outcome"], "invalid_response")
+        self.assertEqual(result["effect_state"], "unknown")
 
     def test_404_is_invalid_model_id(self):
         with StubServer(status=404) as base_url:

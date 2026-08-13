@@ -76,6 +76,21 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result["terminal_reason"], "non_idempotent_effect_unknown")
         self.assertEqual(len(result["attempts"]), 1)
 
+    def test_non_idempotent_malformed_success_blocks_replay(self):
+        result = execute(request(idempotency="non_idempotent"), {
+            "primary": adapter("succeeded", response=None),
+            "fallback": adapter("succeeded"),
+        })
+        self.assertEqual(result["terminal_reason"], "non_idempotent_effect_unknown")
+        self.assertEqual(result["attempts"][0]["outcome"], "invalid_response")
+        self.assertEqual(len(result["attempts"]), 1)
+
+    def test_malformed_route_fails_closed(self):
+        malformed = request()
+        malformed["routes"] = [None]
+        with self.assertRaisesRegex(ValueError, "routes must contain mappings"):
+            execute(malformed, {})
+
     def test_unknown_outcome_fails_closed(self):
         result = execute(request(max_attempts=1), {"primary": adapter("mystery")})
         self.assertEqual(result["attempts"][0]["outcome"], "provider_unavailable")
