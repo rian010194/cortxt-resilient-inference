@@ -37,9 +37,10 @@ Cortxt Resilient Inference
 
 No special fallback prompt is required. The normal OpenAI-compatible
 `messages` are sent to the first eligible route. If that attempt times out, is
-rate limited, or the provider is unavailable, the same messages are sent to
-the next eligible route within the declared attempt budget when replay is
-safe. Non-idempotent work is blocked after an unknown-effect timeout.
+rate limited, the provider is unavailable or reported as overloaded, the same
+messages are sent to the next eligible route within the declared attempt budget
+when replay is safe. Non-idempotent work is blocked after an unknown-effect
+timeout.
 
 ## Quickstart
 
@@ -180,16 +181,34 @@ work stops at the provider or that billing stops. The tool does not restart,
 reload, or provision the failed provider deployment itself. That requires a
 separate, provider-specific management API and lifecycle contract.
 
-The adapter sends `POST <base_url>/chat/completions`, maps 404/429/5xx into
-stable failure classes, and terminates the worker process when the declared
-deadline expires. Timeout is recorded as an unknown-effect stalled return; the
-runner therefore blocks fallback for non-idempotent work.
+The HTTP adapter sends `POST <base_url>/chat/completions` and maps 404 to
+`invalid_model_id`, 429 to `rate_limited`, and 5xx or transport errors to
+`provider_unavailable`. The runner also accepts an explicit `provider_overloaded`
+outcome from simulation or custom adapters. It terminates the worker process
+when the declared deadline expires. Timeout is recorded as an unknown-effect
+stalled return; the runner therefore blocks fallback for non-idempotent work.
 
 Expected CLI exit codes:
 
 - `0`: succeeded;
 - `2`: failed or blocked by routing/policy;
 - `3`: malformed request.
+
+## Supported failure outcomes
+
+The runner treats these outcomes as retryable when the request is replay-safe
+and an eligible fallback remains within the attempt budget:
+
+- `rate_limited` — provider returned a rate-limit response;
+- `provider_unavailable` — provider unreachable or unexpected HTTP error;
+- `provider_overloaded` — provider explicitly reported overload;
+- `timeout_before_effect` — the attempt was stopped before any side effect;
+- `return_channel_stalled` — the response channel stalled (effect unknown).
+
+Permanent outcomes such as `invalid_model_id`, `policy_denied`, and
+`non_idempotent_effect_unknown` are not retried on the same route; the runner
+may continue to the next eligible route. For non-idempotent requests, outcomes
+with an unknown effect remain terminal instead of falling back.
 
 ## Boundaries
 

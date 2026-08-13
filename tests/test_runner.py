@@ -36,6 +36,15 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([a["outcome"] for a in result["attempts"]],
                          ["timeout_before_effect", "succeeded"])
 
+    def test_provider_overloaded_falls_back_and_preserves_evidence(self):
+        result = execute(request(), {"primary": adapter("provider_overloaded"),
+                                     "fallback": adapter("succeeded")})
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["selected_route_id"], "fallback")
+        self.assertEqual(result["response"]["content"], "ok")
+        self.assertEqual([a["outcome"] for a in result["attempts"]],
+                         ["provider_overloaded", "succeeded"])
+
     def test_policy_ineligible_fallback_is_never_called(self):
         called = []
         def unsafe(_route, _timeout):
