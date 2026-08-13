@@ -14,6 +14,13 @@ from urllib.parse import urlsplit
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects so credentials never cross an unvalidated origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect blocked", headers, fp)
+
+
 def _endpoint(base_url: str) -> str:
     parsed = urlsplit(base_url)
     local_http = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
@@ -29,6 +36,8 @@ def _classify_http_status(status: int) -> str:
         return "invalid_model_id"
     if status == 429:
         return "rate_limited"
+    if 300 <= status < 400:
+        return "invalid_configuration"
     return "provider_unavailable"
 
 
@@ -46,10 +55,11 @@ def _worker(base_url: str, model: str, messages: Sequence[Mapping[str, object]],
                 _endpoint(base_url), data=body, method="POST",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(request) as response:
+            opener = urllib.request.build_opener(_NoRedirectHandler())
+            with opener.open(request) as response:
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
-                result = {"outcome": "invalid_response"}
+                result = {"outcome": "invalid_response", "effect_state": "unknown"}
             else:
                 payload = json.loads(raw.decode("utf-8"))
                 message = payload["choices"][0]["message"]
@@ -57,11 +67,11 @@ def _worker(base_url: str, model: str, messages: Sequence[Mapping[str, object]],
                     raise ValueError
                 result = {"outcome": "succeeded", "response": message}
     except urllib.error.HTTPError as exc:
-        result = {"outcome": _classify_http_status(exc.code)}
+        result = {"outcome": _classify_http_status(exc.code), "effect_state": "unknown"}
     except (urllib.error.URLError, TimeoutError, OSError):
         result = {"outcome": "provider_unavailable", "effect_state": "unknown"}
     except (UnicodeError, json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError):
-        result = {"outcome": "invalid_response"}
+        result = {"outcome": "invalid_response", "effect_state": "unknown"}
     result["latency_ms"] = max(0, int((time.monotonic() - started) * 1000))
     result["cost_status"] = "unknown"
     try:
@@ -74,10 +84,10 @@ def _stop_process(process) -> None:
     """Stop a worker without leaving an inference request running in the background."""
     if process.is_alive():
         process.terminate()
-        process.join(0.2)
+        process.join(0.1)
     if process.is_alive():
         process.kill()
-        process.join(0.2)
+        process.join(0.1)
 
 
 @dataclass(frozen=True)

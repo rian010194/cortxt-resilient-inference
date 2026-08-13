@@ -15,10 +15,19 @@ from cortxt_resilient_inference.http_adapter import OpenAICompatibleAdapter
 class StubHandler(BaseHTTPRequestHandler):
     status = 200
     delay_seconds = 0.0
+    redirect_url = None
+    received_authorizations = None
 
     def do_POST(self):
+        if self.received_authorizations is not None:
+            self.received_authorizations.append(self.headers.get("Authorization"))
         length = int(self.headers.get("Content-Length", "0"))
         request = json.loads(self.rfile.read(length))
+        if self.redirect_url:
+            self.send_response(302)
+            self.send_header("Location", self.redirect_url)
+            self.end_headers()
+            return
         if self.delay_seconds:
             time.sleep(self.delay_seconds)
         body = json.dumps({
@@ -38,8 +47,11 @@ class StubHandler(BaseHTTPRequestHandler):
 
 
 class StubServer:
-    def __init__(self, status=200, delay=0.0):
-        handler = type("ConfiguredHandler", (StubHandler,), {"status": status, "delay_seconds": delay})
+    def __init__(self, status=200, delay=0.0, redirect_url=None, capture=False):
+        attributes = {"status": status, "delay_seconds": delay, "redirect_url": redirect_url,
+                      "received_authorizations": [] if capture else None}
+        handler = type("ConfiguredHandler", (StubHandler,), attributes)
+        self.handler = handler
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -86,8 +98,19 @@ class HttpAdapterTests(unittest.TestCase):
         with StubServer(status=500) as base_url:
             result = self.adapter(route(base_url), 3000)
         self.assertEqual(result["outcome"], "provider_unavailable")
+        self.assertEqual(result["effect_state"], "unknown")
 
-    def test_hanging_response_is_terminated_at_hard_deadline(self):
+    def test_redirect_is_blocked_without_forwarding_credentials(self):
+        target_server = StubServer(capture=True)
+        with target_server as target_url:
+            target = target_url + "/capture"
+            with StubServer(redirect_url=target) as base_url:
+                result = self.adapter(route(base_url), 3000)
+            self.assertEqual(result["outcome"], "invalid_configuration")
+            self.assertEqual(result["effect_state"], "unknown")
+            self.assertEqual(target_server.handler.received_authorizations, [])
+
+    def test_hanging_response_is_terminated_at_bounded_deadline(self):
         with StubServer(delay=2.0) as base_url:
             started = time.monotonic()
             result = self.adapter(route(base_url), 300)

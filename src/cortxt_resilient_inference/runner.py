@@ -44,6 +44,16 @@ def execute(request: Mapping[str, object], adapters: Mapping[str, Adapter]) -> d
     max_attempts = request["max_attempts_total"]
     timeout_ms = request["per_attempt_timeout_ms"]
     idempotency = request["idempotency"]
+    if not isinstance(task_id, str) or not task_id:
+        raise ValueError("task_id must be a non-empty string")
+    if not isinstance(routes, list) or not routes:
+        raise ValueError("routes must be a non-empty list")
+    if type(max_attempts) is not int or max_attempts <= 0:
+        raise ValueError("max_attempts_total must be a positive integer")
+    if type(timeout_ms) is not int or timeout_ms <= 0:
+        raise ValueError("per_attempt_timeout_ms must be a positive integer")
+    if idempotency not in {"read_only", "idempotent", "non_idempotent"}:
+        raise ValueError("unknown idempotency fails closed")
     attempts: list[Attempt] = []
 
     for route in routes:

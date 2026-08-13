@@ -1,13 +1,13 @@
 # Cortxt Resilient Inference
 
-A small, provider-neutral tool for hard request deadlines and policy-gated
-fallback when an inference route is unavailable, rate limited, too slow, or
-fails to return a usable result.
+A small, provider-neutral tool for process-enforced request deadlines and
+policy-gated fallback when an inference route is unavailable, rate limited,
+too slow, or fails to return a usable result.
 
 It is deliberately independent of any inference provider, agent runtime, or
 provider SDK.
 
-Status: experimental v0.2. The OpenAI-compatible adapter and hard timeout are
+Status: experimental v0.2. The OpenAI-compatible adapter and bounded timeout are
 implemented and locally tested. Provider-specific reload APIs, streaming,
 circuit breaking, and production traffic validation are not yet included.
 
@@ -16,7 +16,7 @@ circuit breaking, and production traffic validation are not yet included.
 - routes are tried in declared order and only when `policy_eligible` is exactly
   `true`;
 - total attempts are bounded and HTTP attempts run in terminable child
-  processes with a hard wall-clock deadline;
+  processes with a process-enforced deadline;
 - permanent and transient failures remain explicit in the evidence envelope;
 - non-idempotent work is never replayed after an effect may have occurred;
 - an unsafe fallback is skipped rather than silently weakening policy;
@@ -43,10 +43,12 @@ safe. Non-idempotent work is blocked after an unknown-effect timeout.
 
 ## Quickstart
 
-```text
+```sh
+git clone https://github.com/rian010194/cortxt-resilient-inference.git
+cd cortxt-resilient-inference
+python -m pip install -e .
 python -m unittest discover -s tests -v
-set PYTHONPATH=src
-python -m cortxt_resilient_inference.cli examples/timeout-fallback.json
+cortxt-resilient-run examples/timeout-fallback.json
 ```
 
 For a real route, omit `simulations`, add top-level OpenAI-compatible
@@ -72,7 +74,8 @@ cannot switch only its `base_url` to this tool.
 
 ### CLI
 
-Install the local package and create a request from the live template:
+After cloning the repository, install the local package and create a request
+from the live template:
 
 ```text
 python -m pip install -e .
@@ -171,9 +174,11 @@ context-compaction policy in the calling application before execution.
 ## What automatic recovery means
 
 This tool provides request-level recovery: it stops a stalled inference
-attempt and tries the next approved endpoint. It does not restart, reload, or
-provision the failed provider deployment itself. That requires a separate,
-provider-specific management API and lifecycle contract.
+client process from waiting and tries the next approved endpoint when replay is
+safe. Terminating the client process cannot guarantee that already-dispatched
+work stops at the provider or that billing stops. The tool does not restart,
+reload, or provision the failed provider deployment itself. That requires a
+separate, provider-specific management API and lifecycle contract.
 
 The adapter sends `POST <base_url>/chat/completions`, maps 404/429/5xx into
 stable failure classes, and terminates the worker process when the declared
@@ -194,3 +199,7 @@ production adapters, customer data, pricing claims, or automatic tool replay.
 It does not call a provider-specific deployment reload API. Recovery is
 achieved through bounded failover; native reload can be added only where a
 provider exposes and documents such an API.
+
+## License
+
+MIT. See `LICENSE`.

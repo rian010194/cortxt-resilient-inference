@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "cortxt-resilient-inference"
 version = "0.2.0"
 description = "Policy-gated fallback execution for provider-neutral inference"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = []
 
