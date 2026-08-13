@@ -40,8 +40,8 @@ class StubHandler(BaseHTTPRequestHandler):
         self.send_response(self.status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
         try:
+            self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError):
             pass
