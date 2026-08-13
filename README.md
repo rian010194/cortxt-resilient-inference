@@ -181,11 +181,12 @@ work stops at the provider or that billing stops. The tool does not restart,
 reload, or provision the failed provider deployment itself. That requires a
 separate, provider-specific management API and lifecycle contract.
 
-The adapter sends `POST <base_url>/chat/completions`, maps 404/429/5xx and
-explicit `provider_overloaded` signals into stable failure classes, and
-terminates the worker process when the declared deadline expires. Timeout is
-recorded as an unknown-effect stalled return; the runner therefore blocks
-fallback for non-idempotent work.
+The HTTP adapter sends `POST <base_url>/chat/completions` and maps 404 to
+`invalid_model_id`, 429 to `rate_limited`, and 5xx or transport errors to
+`provider_unavailable`. The runner also accepts an explicit `provider_overloaded`
+outcome from simulation or custom adapters. It terminates the worker process
+when the declared deadline expires. Timeout is recorded as an unknown-effect
+stalled return; the runner therefore blocks fallback for non-idempotent work.
 
 Expected CLI exit codes:
 
@@ -205,7 +206,9 @@ and an eligible fallback remains within the attempt budget:
 - `return_channel_stalled` — the response channel stalled (effect unknown).
 
 Permanent outcomes such as `invalid_model_id`, `policy_denied`, and
-`non_idempotent_effect_unknown` do not trigger fallback.
+`non_idempotent_effect_unknown` are not retried on the same route; the runner
+may continue to the next eligible route. For non-idempotent requests, outcomes
+with an unknown effect remain terminal instead of falling back.
 
 ## Boundaries
 
