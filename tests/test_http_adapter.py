@@ -25,9 +25,12 @@ class StubHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         request = json.loads(self.rfile.read(length))
         if self.redirect_url:
-            self.send_response(302)
-            self.send_header("Location", self.redirect_url)
-            self.end_headers()
+            try:
+                self.send_response(302)
+                self.send_header("Location", self.redirect_url)
+                self.end_headers()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             return
         if self.delay_seconds:
             time.sleep(self.delay_seconds)
