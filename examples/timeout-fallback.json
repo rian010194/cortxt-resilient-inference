@@ -10,6 +10,6 @@
   ],
   "simulations": {
     "primary": {"outcome": "timeout_before_effect", "latency_ms": 500, "cost_status": "unknown"},
-    "fallback": {"outcome": "succeeded", "latency_ms": 120, "cost_status": "estimated"}
+    "fallback": {"outcome": "succeeded", "latency_ms": 120, "cost_status": "estimated", "response": {"role": "assistant", "content": "synthetic success"}}
   }
 }

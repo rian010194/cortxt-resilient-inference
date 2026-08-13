@@ -20,8 +20,10 @@ def request(idempotency="read_only", eligible=(True, True), max_attempts=2):
 
 
 def adapter(outcome, **extra):
-    return lambda _route, _timeout: {"outcome": outcome, "latency_ms": 10,
-                                     "cost_status": "estimated", **extra}
+    payload = {"outcome": outcome, "latency_ms": 10, "cost_status": "estimated", **extra}
+    if outcome == "succeeded" and "response" not in payload:
+        payload["response"] = {"role": "assistant", "content": "ok"}
+    return lambda _route, _timeout: dict(payload)
 
 
 class RunnerTests(unittest.TestCase):
@@ -30,6 +32,7 @@ class RunnerTests(unittest.TestCase):
                                      "fallback": adapter("succeeded")})
         self.assertEqual(result["status"], "succeeded")
         self.assertEqual(result["selected_route_id"], "fallback")
+        self.assertEqual(result["response"]["content"], "ok")
         self.assertEqual([a["outcome"] for a in result["attempts"]],
                          ["timeout_before_effect", "succeeded"])
 

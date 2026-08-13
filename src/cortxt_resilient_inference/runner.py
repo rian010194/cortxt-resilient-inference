@@ -5,7 +5,8 @@ from typing import Callable, Mapping
 
 
 RETRYABLE = {"rate_limited", "provider_unavailable", "timeout_before_effect", "return_channel_stalled"}
-PERMANENT = {"invalid_model_id", "policy_denied", "non_idempotent_effect_unknown"}
+PERMANENT = {"invalid_model_id", "policy_denied", "non_idempotent_effect_unknown",
+             "missing_credentials", "invalid_configuration", "invalid_response"}
 KNOWN_OUTCOMES = RETRYABLE | PERMANENT | {"succeeded"}
 
 
@@ -22,14 +23,18 @@ Adapter = Callable[[Mapping[str, object], int], Mapping[str, object]]
 
 
 def _terminal(task_id: str, status: str, attempts: list[Attempt], reason: str,
-              route_id: str | None = None) -> dict[str, object]:
-    return {
+              route_id: str | None = None,
+              response: Mapping[str, object] | None = None) -> dict[str, object]:
+    envelope = {
         "task_id": task_id,
         "status": status,
         "selected_route_id": route_id,
         "terminal_reason": reason,
         "attempts": [asdict(attempt) for attempt in attempts],
     }
+    if response is not None:
+        envelope["response"] = dict(response)
+    return envelope
 
 
 def execute(request: Mapping[str, object], adapters: Mapping[str, Adapter]) -> dict[str, object]:
@@ -62,7 +67,12 @@ def execute(request: Mapping[str, object], adapters: Mapping[str, Adapter]) -> d
         attempts.append(Attempt(len(attempts) + 1, route_id, outcome, latency, cost_status))
 
         if outcome == "succeeded":
-            return _terminal(task_id, "succeeded", attempts, "completed", route_id)
+            response = raw.get("response")
+            if not isinstance(response, Mapping):
+                attempts[-1] = Attempt(attempts[-1].attempt, route_id, "invalid_response",
+                                       latency, cost_status)
+                continue
+            return _terminal(task_id, "succeeded", attempts, "completed", route_id, response)
         effect_state = raw.get("effect_state", "before_effect")
         if idempotency == "non_idempotent" and effect_state != "before_effect":
             return _terminal(task_id, "blocked", attempts, "non_idempotent_effect_unknown")
