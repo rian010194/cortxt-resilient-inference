@@ -193,6 +193,20 @@ Expected CLI exit codes:
 - `2`: failed or blocked by routing/policy;
 - `3`: malformed request.
 
+## Supported failure outcomes
+
+The runner treats these outcomes as retryable when the request is replay-safe
+and an eligible fallback remains within the attempt budget:
+
+- `rate_limited` — provider returned a rate-limit response;
+- `provider_unavailable` — provider unreachable or unexpected HTTP error;
+- `provider_overloaded` — provider explicitly reported overload;
+- `timeout_before_effect` — the attempt was stopped before any side effect;
+- `return_channel_stalled` — the response channel stalled (effect unknown).
+
+Permanent outcomes such as `invalid_model_id`, `policy_denied`, and
+`non_idempotent_effect_unknown` do not trigger fallback.
+
 ## Boundaries
 
 This tool does not decide whether a provider satisfies a data class. Callers

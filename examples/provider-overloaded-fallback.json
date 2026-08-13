@@ -1,0 +1,15 @@
+{
+  "task_id": "example-provider-overloaded-fallback",
+  "data_class": "L0",
+  "idempotency": "read_only",
+  "max_attempts_total": 2,
+  "per_attempt_timeout_ms": 500,
+  "routes": [
+    {"route_id": "primary", "provider": "synthetic-a", "model": "model-a", "policy_eligible": true},
+    {"route_id": "fallback", "provider": "synthetic-b", "model": "model-b", "policy_eligible": true}
+  ],
+  "simulations": {
+    "primary": {"outcome": "provider_overloaded", "latency_ms": 80, "cost_status": "unknown"},
+    "fallback": {"outcome": "succeeded", "latency_ms": 120, "cost_status": "estimated", "response": {"role": "assistant", "content": "synthetic success after overload"}}
+  }
+}
