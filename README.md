@@ -1,15 +1,13 @@
 # Cortxt Resilient Inference
 
-A small, provider-neutral reference tool for bounded retries and policy-gated
+A small, provider-neutral tool for bounded retries and policy-gated
 fallback when an inference route is unavailable, rate limited, too slow, or
 fails to return a usable result.
 
-This repository implements the behavior specified by
-`provider-resilient-execution` vertical version `0.1.0` in the Cortxt product
-repository. It is deliberately independent of InferX, Hermes, and any provider
-SDK.
+It is deliberately independent of any inference provider, agent runtime, or
+provider SDK.
 
-## What v0.1 proves
+## Features
 
 - routes are tried in declared order and only when `policy_eligible` is exactly
   `true`;
@@ -35,8 +33,6 @@ Expected CLI exit codes:
 - `0`: succeeded;
 - `2`: failed or blocked by routing/policy;
 - `3`: malformed request.
-
-See [T2-HANDOVER.md](T2-HANDOVER.md) for the handover validation protocol.
 
 ## Boundaries
 
