@@ -150,6 +150,24 @@ The application remains responsible for deciding which routes satisfy its
 privacy, residency, and provider policies. Set `policy_eligible` to literal
 `true` only after making that decision.
 
+### Context continuity during fallback
+
+Fallback preserves only the context supplied by the application in the
+request. The adapter sends the same `messages` to the next eligible route, so
+system instructions, conversation history, retrieved documents, and tool
+results continue only when they are included in those messages.
+
+Provider-side session state does not move between routes. This includes hidden
+conversation state, prompt caches, partially streamed responses, deployment
+memory, and any other state stored only by the first provider. Applications
+should therefore own and persist the canonical conversation history and make
+each inference request self-contained.
+
+Fallback models may also have different context-window or feature limits.
+Version 0.2 does not summarize, truncate, or translate requests automatically.
+Configure routes that can accept the request as sent, or apply an explicit
+context-compaction policy in the calling application before execution.
+
 ## What automatic recovery means
 
 This tool provides request-level recovery: it stops a stalled inference
