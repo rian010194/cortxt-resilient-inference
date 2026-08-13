@@ -82,6 +82,7 @@ def _worker(base_url: str, model: str, messages: Sequence[Mapping[str, object]],
 
 def _stop_process(process) -> None:
     """Stop a worker without leaving an inference request running in the background."""
+    process.join(0.05)
     if process.is_alive():
         process.terminate()
         process.join(0.1)
