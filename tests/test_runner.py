@@ -20,8 +20,10 @@ def request(idempotency="read_only", eligible=(True, True), max_attempts=2):
 
 
 def adapter(outcome, **extra):
-    return lambda _route, _timeout: {"outcome": outcome, "latency_ms": 10,
-                                     "cost_status": "estimated", **extra}
+    payload = {"outcome": outcome, "latency_ms": 10, "cost_status": "estimated", **extra}
+    if outcome == "succeeded" and "response" not in payload:
+        payload["response"] = {"role": "assistant", "content": "ok"}
+    return lambda _route, _timeout: dict(payload)
 
 
 class RunnerTests(unittest.TestCase):
@@ -30,6 +32,7 @@ class RunnerTests(unittest.TestCase):
                                      "fallback": adapter("succeeded")})
         self.assertEqual(result["status"], "succeeded")
         self.assertEqual(result["selected_route_id"], "fallback")
+        self.assertEqual(result["response"]["content"], "ok")
         self.assertEqual([a["outcome"] for a in result["attempts"]],
                          ["timeout_before_effect", "succeeded"])
 
@@ -57,6 +60,36 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["terminal_reason"], "non_idempotent_effect_unknown")
         self.assertEqual(len(result["attempts"]), 1)
+
+    def test_unknown_idempotency_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "unknown idempotency"):
+            execute(request(idempotency="non-idempotent"), {
+                "primary": adapter("provider_unavailable"),
+                "fallback": adapter("succeeded"),
+            })
+
+    def test_non_idempotent_http_error_effect_blocks_replay(self):
+        result = execute(request(idempotency="non_idempotent"), {
+            "primary": adapter("rate_limited", effect_state="unknown"),
+            "fallback": adapter("succeeded"),
+        })
+        self.assertEqual(result["terminal_reason"], "non_idempotent_effect_unknown")
+        self.assertEqual(len(result["attempts"]), 1)
+
+    def test_non_idempotent_malformed_success_blocks_replay(self):
+        result = execute(request(idempotency="non_idempotent"), {
+            "primary": adapter("succeeded", response=None),
+            "fallback": adapter("succeeded"),
+        })
+        self.assertEqual(result["terminal_reason"], "non_idempotent_effect_unknown")
+        self.assertEqual(result["attempts"][0]["outcome"], "invalid_response")
+        self.assertEqual(len(result["attempts"]), 1)
+
+    def test_malformed_route_fails_closed(self):
+        malformed = request()
+        malformed["routes"] = [None]
+        with self.assertRaisesRegex(ValueError, "routes must contain mappings"):
+            execute(malformed, {})
 
     def test_unknown_outcome_fails_closed(self):
         result = execute(request(max_attempts=1), {"primary": adapter("mystery")})

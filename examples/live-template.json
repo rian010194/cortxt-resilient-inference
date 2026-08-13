@@ -1,0 +1,28 @@
+{
+  "task_id": "replace-me",
+  "data_class": "L0",
+  "idempotency": "read_only",
+  "max_attempts_total": 2,
+  "per_attempt_timeout_ms": 15000,
+  "messages": [
+    {"role": "user", "content": "Hello"}
+  ],
+  "routes": [
+    {
+      "route_id": "primary",
+      "provider": "provider-a",
+      "model": "exact-primary-model-id",
+      "base_url": "https://provider-a.example/v1",
+      "api_key_env": "PROVIDER_A_API_KEY",
+      "policy_eligible": true
+    },
+    {
+      "route_id": "fallback",
+      "provider": "provider-b",
+      "model": "exact-fallback-model-id",
+      "base_url": "https://provider-b.example/v1",
+      "api_key_env": "PROVIDER_B_API_KEY",
+      "policy_eligible": true
+    }
+  ]
+}
