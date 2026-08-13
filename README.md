@@ -37,9 +37,10 @@ Cortxt Resilient Inference
 
 No special fallback prompt is required. The normal OpenAI-compatible
 `messages` are sent to the first eligible route. If that attempt times out, is
-rate limited, or the provider is unavailable, the same messages are sent to
-the next eligible route within the declared attempt budget when replay is
-safe. Non-idempotent work is blocked after an unknown-effect timeout.
+rate limited, the provider is unavailable or reported as overloaded, the same
+messages are sent to the next eligible route within the declared attempt budget
+when replay is safe. Non-idempotent work is blocked after an unknown-effect
+timeout.
 
 ## Quickstart
 
@@ -180,10 +181,11 @@ work stops at the provider or that billing stops. The tool does not restart,
 reload, or provision the failed provider deployment itself. That requires a
 separate, provider-specific management API and lifecycle contract.
 
-The adapter sends `POST <base_url>/chat/completions`, maps 404/429/5xx into
-stable failure classes, and terminates the worker process when the declared
-deadline expires. Timeout is recorded as an unknown-effect stalled return; the
-runner therefore blocks fallback for non-idempotent work.
+The adapter sends `POST <base_url>/chat/completions`, maps 404/429/5xx and
+explicit `provider_overloaded` signals into stable failure classes, and
+terminates the worker process when the declared deadline expires. Timeout is
+recorded as an unknown-effect stalled return; the runner therefore blocks
+fallback for non-idempotent work.
 
 Expected CLI exit codes:
 

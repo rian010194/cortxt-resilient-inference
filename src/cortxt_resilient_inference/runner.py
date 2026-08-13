@@ -4,7 +4,8 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Mapping
 
 
-RETRYABLE = {"rate_limited", "provider_unavailable", "timeout_before_effect", "return_channel_stalled"}
+RETRYABLE = {"rate_limited", "provider_unavailable", "provider_overloaded",
+             "timeout_before_effect", "return_channel_stalled"}
 PERMANENT = {"invalid_model_id", "policy_denied", "non_idempotent_effect_unknown",
              "missing_credentials", "invalid_configuration", "invalid_response"}
 KNOWN_OUTCOMES = RETRYABLE | PERMANENT | {"succeeded"}
