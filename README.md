@@ -26,6 +26,21 @@ The CLI supports deterministic simulations and real OpenAI-compatible HTTP
 routes. API keys are read only from named environment variables. Remote routes
 must use HTTPS; HTTP is accepted only for localhost tests.
 
+```text
+Your app or agent
+        |
+        v
+Cortxt Resilient Inference
+        |-- primary OpenAI-compatible endpoint (for example InferX)
+        `-- approved fallback endpoint
+```
+
+No special fallback prompt is required. The normal OpenAI-compatible
+`messages` are sent to the first eligible route. If that attempt times out, is
+rate limited, or the provider is unavailable, the same messages are sent to
+the next eligible route within the declared attempt budget when replay is
+safe. Non-idempotent work is blocked after an unknown-effect timeout.
+
 ## Quickstart
 
 ```text
@@ -48,6 +63,99 @@ For a real route, omit `simulations`, add top-level OpenAI-compatible
 Copy `examples/live-template.json`, replace the endpoint/model identifiers, and
 set the named API-key environment variables before running it. Never put API
 keys in the JSON file.
+
+## Integrate it into your application
+
+Version 0.2 can be used as a CLI subprocess or imported by a Python
+application. It is not yet a drop-in OpenAI proxy: an existing OpenAI client
+cannot switch only its `base_url` to this tool.
+
+### CLI
+
+Install the local package and create a request from the live template:
+
+```text
+python -m pip install -e .
+copy examples\live-template.json request.json
+```
+
+Edit `request.json` so the primary route contains the provider's exact
+OpenAI-compatible base URL and model ID. Add a second approved route for
+fallback. Keep credentials outside the file:
+
+```powershell
+$env:INFERX_API_KEY = "replace-with-real-key"
+$env:FALLBACK_API_KEY = "replace-with-real-key"
+cortxt-resilient-run request.json
+```
+
+On macOS or Linux, set the same variables with `export`:
+
+```sh
+export INFERX_API_KEY="replace-with-real-key"
+export FALLBACK_API_KEY="replace-with-real-key"
+cortxt-resilient-run request.json
+```
+
+A successful run prints one JSON envelope containing `status`,
+`selected_route_id`, the assistant `response`, and every attempted route. Store
+or parse that envelope in the calling application instead of scraping logs.
+
+### Python
+
+The adapter uses spawned child processes to enforce request deadlines, so keep
+the entry point behind the normal `__main__` guard:
+
+```python
+from cortxt_resilient_inference.http_adapter import OpenAICompatibleAdapter
+from cortxt_resilient_inference.runner import execute
+
+
+def main():
+    request = {
+        "task_id": "request-123",
+        "data_class": "L0",
+        "idempotency": "read_only",
+        "max_attempts_total": 2,
+        "per_attempt_timeout_ms": 15_000,
+        "routes": [
+            {
+                "route_id": "inferx-primary",
+                "base_url": "https://your-inferx-endpoint.example/v1",
+                "model": "exact-primary-model-id",
+                "api_key_env": "INFERX_API_KEY",
+                "policy_eligible": True,
+            },
+            {
+                "route_id": "fallback",
+                "base_url": "https://fallback-provider.example/v1",
+                "model": "exact-fallback-model-id",
+                "api_key_env": "FALLBACK_API_KEY",
+                "policy_eligible": True,
+            },
+        ],
+    }
+    messages = [{"role": "user", "content": "Summarize this request."}]
+    adapter = OpenAICompatibleAdapter(messages)
+    adapters = {route["route_id"]: adapter for route in request["routes"]}
+    result = execute(request, adapters)
+    print(result)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+The application remains responsible for deciding which routes satisfy its
+privacy, residency, and provider policies. Set `policy_eligible` to literal
+`true` only after making that decision.
+
+## What automatic recovery means
+
+This tool provides request-level recovery: it stops a stalled inference
+attempt and tries the next approved endpoint. It does not restart, reload, or
+provision the failed provider deployment itself. That requires a separate,
+provider-specific management API and lifecycle contract.
 
 The adapter sends `POST <base_url>/chat/completions`, maps 404/429/5xx into
 stable failure classes, and terminates the worker process when the declared
